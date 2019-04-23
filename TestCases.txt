@@ -1,0 +1,30 @@
+#ONE(&1,&2) {ZUZIA &1 $ONE(TOMEK, &1) &2}
+--;
+#ONE(&1,&2) {ZUZIA &1 $TWO(TOMEK) &2}
+#TWO(&1,&2) {ZUZIA &1 &2 $ONE(MAREK,&1)}
+--;
+#ONE(&1,&2) {$THREE($TWO(TOMEK))}
+#TWO(&1) {&1 $THREE(MAREK)}
+#THREE(&1) {$FOUR(&1))}
+#FOUR(&1) {$ONE(&1)}
+--;
+#ONE(&1) {&1 $THREE($TWO(TOMEK))}
+#TWO(&1) {$ONE(&1)}
+#THREE(&1) {&1}
+--;
+#ONE(&1,&2) {$TWO($THREE($THREE(TOMEK)))}
+#TWO(&1) {$THREE(&1)}
+#THREE(&1) {&1}
+--;
+#ONE(&1,&2) {$TWO($THREE($TWO($TWO(TOMEK))), $TWO(NO), $THREE(TAK))}
+#TWO(&1) {$THREE(&1)}
+#THREE(&1) {&1}
+--;
+#ONE(&1,&2) {$TWO(TOMEK), $TWO(NO), $THREE(TAK))}
+#TWO(&1) {$THREE(&1)}
+#THREE(&1) {&1}
+--;
+#ONE(&1,&2) {$TWO(TOMEK) $THREE($TWO(TOMEK))}
+#TWO(&1) {&1 $THREE(MAREK)}
+#THREE(&1) {$FOUR(&1))}
+#FOUR(&1) {&1}

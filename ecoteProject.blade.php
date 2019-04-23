@@ -11,12 +11,43 @@
 
     </head>
     <body>
+        <div class="mt-3 ml-3">
+            <span class="font-weight-bold">
+                Select a file with testcases as input
+            </span>
+            <input
+                type="file"
+                id="myFile"
+            >
+        </div>
+        <div class="row p-3">
+            <div class="col">
+                INPUT PREVIEW:
+            </div>
+        </div>
+        <div class="row pl-3">
+            <div class="col">
+                <textarea
+                    rows="5"
+                    style="width: 100%"
+                    id="inputFile"
+                >
+                </textarea>
+            </div>
+        </div>
+        <span>Click button to recalculate tests from textarea</span>
+        <button onclick="rewriteOutput()">Calculate</button>
+        <div class="row p-3">
+            <div class="col">
+                RESULTS:
+            </div>
+        </div>
         <div id="app">
         </div>
     </body>
     <script src="{{ mix('/js/app.js')}}"></script>
     <script>
-        // Warn if overriding existing method
+//----------------------------------------------------- HELPER FUNCTIONS + PARSER -----------------------------------------------------
         if(Array.prototype.equals) {
             console.warn("Overriding existing Array.prototype.equals. Possible causes: New API defines the method, there's a framework conflict or you've got double inclusions in your code.");
         }
@@ -86,7 +117,6 @@
                         },
                         ")": (char) => {
                             if (this.callStack.length) {
-                                //this.buffer = this.buffer + `$${this.current.discriminant}(${this.current.args.join(",")})`
                                 this.current = Object.assign({}, this.callStack.pop())
                             } else {
                                 this.current.args.push(this.stored.slice(0, -1))
@@ -133,7 +163,6 @@
                         },
                         ")": (char) => {
                             if (this.callStack.length) {
-                                //this.buffer = this.buffer + `$${this.current.discriminant}(${this.current.args.join(",")})`
                                 this.callStack.pop()
                             } else {
                                 this.current.args.push(this.stored.slice(0, -1))
@@ -156,7 +185,7 @@
                 this.callStack = []
                 this.state = "ready"
                 this.parsing = {}
-                return this.result[0].args
+                return this.result && this.result[0] && this.result[0].args
             }
             
             consume (string) {
@@ -171,43 +200,48 @@
 
         let parseToString = (root) => {
             let resultStr = ""
-            Object.keys(root).forEach(name => {
-                resultStr += `#${name}(`
-                root[name].args.forEach((arg, index) => {
-                    resultStr += arg + (index != root[name].args.length - 1 ? ',' : '')
+            Object.keys(root).forEach(instance => {
+                resultStr += `#${root[instance].descriptor}(`
+                root[instance].args.forEach((arg, index) => {
+                    resultStr += arg + (index != root[instance].args.length - 1 ? ',' : '')
                 })
-                resultStr += `) {${root[name].body}}\n`
+                resultStr += `) {${root[instance].body}}\n`
             })
             return resultStr
         }
         let parseToJSON = (string) => {
-            const reg = /\#[^\(]+\(\&\d+(?:,\s*\&\d+)*\)\s*\{[^\}]*\}/g
-            const resultObj = {}
+            console.log(string)
+            const reg = /\#[^\(]+\((?:\&\d+(?:,\s*\&\d+)*)?\)\s*\{[^\}]*\}/g
+            const resultObj = []
             var definitionString;
-            string.match(reg).forEach(definitionString => {
-                //regex returns "#something(", we trim it to "something" which is name
-                const name = definitionString.match(/^\#[^\(]+\(/)[0].slice(1,-1)
-                //regex returns "(&1, &2, &3){"
-                let argsString = definitionString.match(/\(\&\d+\s*(?:\,\s*\&\d+)*\)\s*\{/)
-                let args = []
-                let arg;
-                argsString = argsString && argsString[0]
-                if (argsString) {
-                    //iterate over arguments, add each one separately to args table
-                    const argsFound = argsString.match(/\&\d+/g)
-                    if(argsFound && argsFound.length) {
-                        argsFound.forEach(arg => {
-                            args.push(arg)
-                        })
+            const argString = string.match(reg)
+            if (argString) {
+                argString.forEach(definitionString => {
+                    //regex returns "#something(", we trim it to "something" which is name
+                    const name = definitionString.match(/^\#[^\(]+\(/)[0].slice(1,-1)
+                    //regex returns "(&1, &2, &3){"
+                    let argsString = definitionString.match(/\(\&\d+\s*(?:\,\s*\&\d+)*\)\s*\{/)
+                    let args = []
+                    let arg;
+                    argsString = argsString && argsString[0]
+                    if (argsString) {
+                        //iterate over arguments, add each one separately to args table
+                        const argsFound = argsString.match(/\&\d+/g)
+                        if(argsFound && argsFound.length) {
+                            argsFound.forEach(arg => {
+                                args.push(arg)
+                            })
+                        }
                     }
-                }
-                //regex returns "{bodymessage}", we trim it to "bodymessage"
-                const body = definitionString.match(/\{[^\{]*\}/)[0].slice(1, -1)
-                resultObj[name] = {
-                    args: args,
-                    body: body,
-                }
-            })
+                    //regex returns "{bodymessage}", we trim it to "bodymessage"
+                    const body = definitionString.match(/\{[^\{]*\}/)[0].slice(1, -1)
+                    resultObj.push({
+                        descriptor: name,
+                        args: args,
+                        body: body,
+                    })
+                })
+            }
             return resultObj
         }
         let argReplace = (obj, args = []) => {
@@ -219,37 +253,24 @@
         }
         let getCalls = (string) => {
             return new Parser().getCalls(string)
-            // var calls = []
-            // const invocations = string.match(/\$[^\(]+\([^\)]*\)/g) || []
-            // invocations.forEach(call => {
-            //     calls.push(call)
-            // })
-            // return [] //calls
         }
         let getCallsWithInvoker = (invoker, string) => {
                 let result = []
                 getCalls(string).forEach(call => {
-                    let callobj = {}
-                    callobj[invoker] = call
-                    result.push(callobj)
+                    result.push({invoker, call})
+                    // let callobj = {}
+                    // callobj[invoker] = call
+                    // result.push(callobj)
                 })
                 return result
         }
         let getName = (call) => {
-            //regex returns "#something(", we trim it to "something"
+            //regex returns "#descriptor(...)", we trim it to "descriptor"
             const match = call.match(/^[\$\#][^\(]+\(/)
             return match && match[0] && match[0].slice(1, -1)
         }
         let getArgs = (string) => {
-            //get call fragment with arguments "(...)",
-            //then from that get arguments separated by commas and ending with a closing bracket
             return new Parser().getArgs(string)
-            // var result = []
-            // const match = string.match(/\([^\)]*\)/)
-            // const trimmedArgsString = match && match[0] && match[0].slice(1, -1)
-            // result = trimmedArgsString && trimmedArgsString.match(/[^\,\)]+/g) || []
-            // console.log("getArgs: ", JSON.stringify(result))
-            // return result
         }
         let getProperties = (call) => {
             const invoker = Object.keys(call)[0]
@@ -257,288 +278,143 @@
             const callArgs = getArgs(call[invoker]);
             return [invoker, callName, callArgs]
         }
+//-------------------------------------------- ALGORITHM FOR INFINITE RECURSION FINDING --------------------------------------------------
+
         let isInfiniteLooped = (root) => {
             let macrocallsToCheck = []
-            Object.keys(root).forEach(name => {
-                const calls = getCalls(root[name].body)
-                root[name].canCall = {}
+            root.forEach(definition => {
+                const invoker = `$${definition.descriptor}(${definition.args.join(',')})`
+                const calls = getCalls(definition.body)
                 calls.forEach(call => {
-                    const callName = getName(call)
-                    root[name].canCall[callName] = []
-                    root[name].canCall[callName] = root[name].canCall[callName].concat([getArgs(call)])
-                })
-                calls.forEach(call => {
-                    let callobj = {}
-                    callobj[name] = call
-                    macrocallsToCheck.push(callobj)
+                    macrocallsToCheck.push({invoker, call})
                 })
             })
-            console.log("Input structure", JSON.stringify(root, null, '\t'))
-            while(macrocallsToCheck.length) {
-                let added = false
-                call = macrocallsToCheck.pop()
-                const [invoker, callName, callArgs] = getProperties(call)
-                if (!Object.keys(root[invoker].canCall).includes(callName)) {
-                    root[invoker].canCall[callName] = []
-                }
-                if (!root[invoker].canCall[callName].find(args => args.equals(callArgs))) {
-                    root[invoker].canCall[callName].push(callArgs)
-                    added = true
-                }
-                if (Object.keys(root[invoker].canCall).includes(callName)) {
-                    if(Object.keys(root[invoker].canCall).includes(invoker)) {
-                        if(root[invoker].canCall[invoker].find(args => args.equals(callArgs))) {
-                            if (!added) {
-                                console.log(`Infinite Recursion found: ${invoker} can call:`, call[invoker])
-                                console.log("Final structure",root)
-                                return true
-                            }
-                        }
+            while (macrocallsToCheck.length) {
+                const instanceChecked = macrocallsToCheck.pop()
+                const invoker = instanceChecked.invoker
+                const call = instanceChecked.call
+                const invokerDescriptor = getName(invoker)
+                const invokerArgs = getArgs(invoker)
+                let invokerInstance = root.find(e => e.descriptor === invokerDescriptor && e.args.equals(invokerArgs))
+                if (invokerInstance) {
+                    //found instance of invoker
+                    if (!invokerInstance.canCall) {
+                        //initialize canCall structure
+                        invokerInstance.canCall = []
                     }
+                    if (!invokerInstance.canCall.find(c => c === call)) {
+                        //there is no such call in cancall structure of this invocation
+                        invokerInstance.canCall.unshift(call)
+                    } 
+                } else {
+                    //if invoker is not present in the list, create one using body of definition we already know.
+                    invokerInstance = root.find(e => e.descriptor === invokerDescriptor)
+                    if (!invokerInstance) {
+                        throw "SOMETHING IS HEAVILY BROKEN"
+                    }
+                    
+                    let newInstance = {
+                        descriptor: invokerDescriptor,
+                        args: invokerArgs,
+                        body: argReplace(invokerInstance, invokerArgs),
+                    }
+                    root.push(newInstance)
+                }
+                if (invokerInstance.descriptor === getName(call) && invokerInstance.args.equals(getArgs(call))) {
+                    return `Infinite Recursion found: ${invoker} can call:${call}`
+                }
+                let callInstance = root.find(e => e.descriptor === getName(call) && e.args.equals(getArgs(call)))
+                if (!callInstance) {
+                    callInstance = root.find(e => e.descriptor === getName(call))
                 }
                 //calls originated from invoker
-                let newMacrocalls = getCallsWithInvoker(invoker, argReplace(root[callName], callArgs))
-                let filtered = newMacrocalls.filter(call => {
-                    const [invoker, callName, callArgs] = getProperties(call)
-                    if (invoker === callName) {
-                        return true
-                    }
-                    return !(root[invoker] &&
-                        root[invoker].canCall &&
-                        root[invoker].canCall[callName] &&
-                        root[invoker].canCall[callName].find(args => args.equals(callArgs)))
+                let newMacrocalls = getCallsWithInvoker(invoker, argReplace(callInstance, getArgs(call) || []))
+                newMacrocalls.forEach(call => {
+                    macrocallsToCheck.unshift(call)
                 })
-                if (filtered.length) {
-                    console.log(`New Macrocall${filtered.length === 1 ? '' : 's'} found`,JSON.stringify(filtered, null, '\t'))
-                }
-                macrocallsToCheck = macrocallsToCheck.concat(filtered)
                 //calls originated from called macrocalls
-                newMacrocalls = getCallsWithInvoker(callName, argReplace(root[callName], callArgs))
-                filtered = newMacrocalls.filter(call => {
-                    const [invoker, callName, callArgs] = getProperties(call)
-                    if (invoker === callName) {
-                        return true
-                    }
-                    return !(root[invoker] &&
-                        root[invoker].canCall &&
-                        root[invoker].canCall[callName] &&
-                        root[invoker].canCall[callName].find(args => args.equals(callArgs)))
+                newMacrocalls = getCallsWithInvoker(call, argReplace(callInstance, getArgs(call) || []))
+                newMacrocalls.forEach(call => {
+                    macrocallsToCheck.unshift(call)
                 })
-                if (filtered.length) {
-                    console.log(`New Macrocall${filtered.length === 1 ? '' : 's'} found`,JSON.stringify(filtered, null, '\t'))
-                }
-                macrocallsToCheck = macrocallsToCheck.concat(filtered)
             }
-            console.log("Final structure",root)
             return false
         }
-        const testCases = [
-            {
-                'ONE': {
-                    args: [
-                        "&1",
-                        "&2",
-                    ],
-                    body: "ZUZIA &1 $ONE(TOMEK, &1)     &2",
-                },
-            },
-            {
-                'ONE': {
-                    args: [
-                        "&1",
-                        "&2",
-                    ],
-                    body: "ZUZIA &1 $TWO(TOMEK)     &2",
-                },
-                'TWO': {
-                    args: [
-                        "&1",
-                        "&2",
-                    ],
-                    body: "ZUZIA &1 &2 $ONE(MAREK,&1)",
-                }
-            },
-            {
-                'ONE': {
-                    args: [
-                        "&1",
-                        "&2",
-                    ],
-                    body: "$THREE($TWO(TOMEK))",
-                },
-                'TWO': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "&1 $THREE(MAREK)",
-                },
-                'THREE': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "$FOUR(&1))",
-                },
-                'FOUR': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "$ONE(&1)",
-                }
-            },
-            {
-                'ONE': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "&1 $THREE($TWO(TOMEK))",
-                },
-                'TWO': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "$ONE(&1)",
-                },
-                'THREE': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "&1",
-                }
-            },
-            {
-                'ONE': {
-                    args: [
-                        "&1",
-                        "&2",
-                    ],
-                    body: "$TWO($THREE(TOMEK))",
-                },
-                'TWO': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "$THREE(&1)",
-                },
-                'THREE': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "&1",
-                }
-            },
-            {
-                'ONE': {
-                    args: [
-                        "&1",
-                        "&2",
-                    ],
-                    body: "$TWO($THREE($TWO($TWO(TOMEK))), $TWO(NO), $THREE(TAK))",
-                },
-                'TWO': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "$THREE(&1)",
-                },
-                'THREE': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "&1",
-                }
-            },
-            {
-                'ONE': {
-                    args: [
-                        "&1",
-                        "&2",
-                    ],
-                    body: "$TWO(TOMEK), $TWO(NO), $THREE(TAK))",
-                },
-                'TWO': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "$THREE(&1)",
-                },
-                'THREE': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "&1",
-                }
-            },
-            {
-                'ONE': {
-                    args: [
-                        "&1",
-                        "&2",
-                    ],
-                    body: "$TWO(TOMEK) $THREE($TWO(TOMEK))",
-                },
-                'TWO': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "&1 $THREE(MAREK)",
-                },
-                'THREE': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "$FOUR(&1))",
-                },
-                'FOUR': {
-                    args: [
-                        "&1",
-                    ],
-                    body: "&1",
-                }
+
+//-------------------------------------------- INPUT/OUTPUT SECTION --------------------------------------------------
+        var input = document.getElementById("myFile");
+        var output = document.getElementById("inputFile");
+        let testCases = null
+        input.addEventListener("change", function () {
+            if (this.files && this.files[0]) {
+                var myFile = this.files[0];
+                var reader = new FileReader();
+                
+                reader.addEventListener('load', function (e) {
+                    output.textContent = e.target.result;
+                    rewriteOutput()
+                });
+                
+                reader.readAsBinaryString(myFile);
             }
-        ]
+        });
+        function rewriteOutput () {
+            const string = document.getElementById("inputFile").value
+            let tests = string.split('--;')
+            tests = tests.reduce((acc, curr) => {
+                if (curr) {
+                    acc.push(parseToJSON(curr.trim()))
+                }
+                return acc
+            }, [])
+            writeToOutput(tests)
+        }
         function htmlToElement(html) {
             var template = document.createElement('template');
             html = html.trim(); // Never return a text node of whitespace as the result
             template.innerHTML = html;
             return template.content.firstChild;
         }
-        testCases.forEach((testCase, index) => {
-            var newElem = htmlToElement(`
-                <div class="ml-3 mt-3">
-                    <div class="ml-3">
-                    <span
-                        class="font-weight-bold"
-                    >
-                        TestCase${index} macrodefinitions:
-                    </span>
-                    </div>
-                    <div class="mt-1">
+        function writeToOutput(testCases) {
+            document.querySelector('#app').innerHTML = ''
+            testCases.forEach((testCase, index) => {
+                var newElem = htmlToElement(`
+                    <div class="ml-3 mt-3">
+                        <div class="ml-3">
                         <span
+                            class="font-weight-bold"
                         >
-                        ${parseToString(testCase).replace(/\n/g, "<br>")}
+                            TestCase #${index} macrodefinitions:
+                        </span>
+                        </div>
+                        <div class="mt-1">
+                            <span
+                            >
+                                ${parseToString(testCase).replace(/\n/g, "<br>")}
+                            </span>
+                        </div>
+                        <div class="mt-1">
+                            <span
+                            >
+                            Has infinite recursion:
+                            </span>
+                        </div>
+                        <span
+                            id="result"
+                            class="font-weight-bold"
+                        >
+                            ${isInfiniteLooped(testCase)}
                         </span>
                     </div>
-                    <div class="mt-1">
-                        <span
-                        >
-                        Has infinite recursion:
-                        </span>
-                    </div>
-                    <span
-                        id="result"
-                        class="font-weight-bold"
-                    >
-                    ${isInfiniteLooped(testCase)}
-                    </span>
-                </div>
-            </div>`)
-            document.querySelector('#app').appendChild(newElem)
-        })
-        var footer = htmlToElement(`\
-            <div style="margin-top: 2rem;">\
-                To see more details, look in the console log\
-            </div>\
-        `)
-        document.querySelector('#app').appendChild(footer)
+                </div>`)
+                document.querySelector('#app').appendChild(newElem)
+            })
+            var footer = htmlToElement(`\
+                <div style="margin-top: 2rem;">\
+                    To see more details, look in the console log\
+                </div>\
+            `)
+            document.querySelector('#app').appendChild(footer)
+        }
     </script>
 </html>
